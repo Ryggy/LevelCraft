@@ -1,115 +1,155 @@
-using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEngine;
+using DataVisualization;
 
-namespace HeatMap
+public class HeatmapManager : MonoBehaviour
 {
-    public class HeatMapManager : MonoBehaviour
+    public Gradient heatmapGradient;
+    public Vector2 gridMin = new Vector2(-10, -10);
+    public Vector2 gridMax = new Vector2(10, 10);
+    public Vector2Int gridResolution = new Vector2Int(50, 50);
+    public float bandwidth = 1.0f;
+    public float kernelMaxDistance = 5.0f;
+
+    private BaseHeatmap heatmap;
+    private BaseKDE kde;
+    private GridTransformation.Settings gridSettings;
+
+    private List<ISensor> sensors = new List<ISensor>(); // Observers
+    private PositionDataManager positionDataManager = new PositionDataManager();
+    public MeshRenderer displayRenderer;
+    
+    private string saveDirectory = Application.dataPath + "/../SaveImages/";
+
+    void Start()
     {
-        // Grid dimensions and cell size
-        private int width;
-        private int height;
-        private float cellSize;
+        // Set up grid and KDE
+        gridSettings = new GridTransformation.Settings
+        {
+            resolution = gridResolution,
+            minEdge = gridMin,
+            maxEdge = gridMax
+        };
+
+        // Automatically register sensors in the scene
+        RegisterSensors();
+       
+        // Validate sensor positions
+        List<Vector3> initialPositions = CollectPositions();
+        if (initialPositions.Count == 0)
+        {
+            Debug.LogWarning("No sensor positions found at initialization. Creating an empty heatmap.");
+            InitialiseKDEWithDefaults();
+        }
+        else
+        {
+            InitialiseKDE(initialPositions);
+        }
+
+        displayRenderer.material.mainTexture = heatmap.Texture;
+
+    }
+
+    void Update()
+    {
+        // Collect positions and update KDE
+        List<Vector3> positions = CollectPositions();
+
+        kde.Update(positions); // Update KDE with current sensor positions
+        heatmap.Update(kde.Grid); // Update heatmap texture
         
-        // 2D array to store grid nodes
-        private GridNode[,] grid;
-        // Reference to the heatmap renderer
-        private HeatMapRenderer renderer;
-        private void Start()
+        // Add cumulative data
+        positionDataManager.AddPositions(positions);
+        
+        if (Input.GetKeyDown(KeyCode.S))
         {
-            renderer = GetComponent<HeatMapRenderer>();
-            
-            InitialiseGrid(256, 256, 1f);
-            renderer.InitialiseRenderTexture(width, height);
-            AddEvent(new Vector3(0,0,0),"test", 1f);
-            AddEvent(new Vector3(1,0,1),"test", 1f);
-            AddEvent(new Vector3(1,0,1),"test", 1f);
-            AddEvent(new Vector3(2,0,2),"test", 1f);
-            
-            UpdateVisualisation();
+            TakeSnapshot();
+        }
+    }
+    
+    public void TakeSnapshot()
+    {
+        List<Vector3> currentPositions = CollectPositions();
+        positionDataManager.TakeSnapshot(currentPositions);
+        Debug.Log("Snapshot taken: " + currentPositions.Count + " positions.");
+    }
+
+    private void RegisterSensors()
+    {
+        // Find all GameObjects with ISensor components
+        ISensor[] foundSensors = FindObjectsOfType<MonoBehaviour>().OfType<ISensor>().ToArray();
+        sensors.AddRange(foundSensors);
+    }
+
+    private List<Vector3> CollectPositions()
+    {
+        List<Vector3> positions = new List<Vector3>();
+        foreach (var sensor in sensors)
+        {
+            positions.Add(sensor.GetPosition());
+        }
+        return positions;
+    }
+    
+    private void InitialiseKDE(List<Vector3> positions)
+    {
+        kde = new KDE(positions, gridSettings, bandwidth, kernelMaxDistance);
+        heatmap = new BaseHeatmap(kde.Grid, heatmapGradient);
+    }
+
+    private void InitialiseKDEWithDefaults()
+    {
+        // Use a grid with zero density for initialisation
+        kde = new KDE(new List<Vector3>(), gridSettings, bandwidth, kernelMaxDistance);
+        heatmap = new BaseHeatmap(kde.Grid, heatmapGradient, 0, 1); // Default min and max
+    }
+    
+    [ContextMenu("Save Cumulative Heatmap")]
+    public void SaveCumulativeHeatmap()
+    {
+        SaveTexture(heatmap.Texture, "CumulativeHeatmap.png");
+        Debug.Log("Cumulative heatmap saved.");
+    }
+
+    [ContextMenu("Save Snapshots")]
+    public void SaveSnapshots()
+    {
+        var snapshots = positionDataManager.GetAllSnapshots();
+
+        for (int i = 0; i < snapshots.Count; i++)
+        {
+            var snapshot = snapshots[i];
+
+            // Create a KDE for the snapshot
+            var snapshotKDE = new KDE(snapshot, gridSettings, bandwidth, kernelMaxDistance);
+            var snapshotHeatmap = new BaseHeatmap(snapshotKDE.Grid, heatmapGradient);
+
+            SaveTexture(snapshotHeatmap.Texture, $"Snapshot_{i}.png");
+
+            // Dispose of temporary heatmap and KDE
+            snapshotHeatmap.Dispose();
+            snapshotKDE.Dispose();
         }
 
-        private void Update()
-        {
-            if (Input.GetMouseButtonDown(0)) // Left mouse button
-            {
-                // Convert mouse position to world position
-                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-                if (Physics.Raycast(ray, out RaycastHit hit))
-                {
-                    Vector3 worldPosition = hit.point;
+        Debug.Log("All snapshots saved.");
+    }
 
-                    // Add an event at the hit position
-                    AddEvent(worldPosition, "test", 1f);
-                }
-            }
+    private void SaveTexture(Texture2D texture, string fileName)
+    {
+        if (!Directory.Exists(saveDirectory))
+        {
+            Directory.CreateDirectory(saveDirectory);
         }
 
-        /// <summary>
-        /// Initialise the grid system with specified dimensions and cell size
-        /// </summary>
-        /// <param name="width"></param>
-        /// <param name="height"></param>
-        /// <param name="cellSize"></param>
-        public void InitialiseGrid(int width, int height, float cellSize)
-        {
-            this.width = width;
-            this.height = height;
-            this.cellSize = cellSize;
-
-            grid = new GridNode[width, height];
-
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    Vector3 worldPosition = new Vector3(x * cellSize, 0, y * cellSize);
-                    grid[x, y] = new GridNode(worldPosition);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Add an event to the heat map at the specified position
-        /// </summary>
-        /// <param name="position"></param>
-        /// <param name="eventType"></param>
-        /// <param name="weight"></param>
-        public void AddEvent(Vector3 position, string eventType, float weight)
-        {
-            GridNode node = FindNode(position);
-            if (node != null)
-            {
-                node.AddEvent(eventType, weight);
-            }
-        }
-
-        /// <summary>
-        /// Find the grid node corresponding to a given position
-        /// </summary>
-        /// <param name="position"></param>
-        /// <returns></returns>
-        private GridNode FindNode(Vector3 position)
-        {
-            int x = Mathf.FloorToInt(position.x / cellSize);
-            int y = Mathf.FloorToInt(position.z / cellSize);
-
-            if (x >= 0 && x < width && y >= 0 && y < height)
-            {
-                return grid[x, y];
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        ///  Update the visualisation of the heat map
-        /// </summary>
-        private void UpdateVisualisation()
-        {
-            if (renderer != null)
-            {
-                renderer.RenderHeatMap(grid, null); // Replace `null` with the actual gradient settings
-            }
-        }
+        byte[] bytes = texture.EncodeToPNG();
+        File.WriteAllBytes(Path.Combine(saveDirectory, fileName), bytes);
+    }
+    
+    private void OnDestroy()
+    {
+        heatmap.Dispose();
+        kde.Dispose();
     }
 }
