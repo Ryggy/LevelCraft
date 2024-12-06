@@ -54,19 +54,21 @@ public class SimpleMeasureTool : EditorTool
                 DrawOutlinedLabel(obj.position, $"Position: {obj.position}", outlineWidth);
             }
 
-            // Display distance labels
-            foreach (var otherObj in Selection.transforms)
+            // Display distance labels and draw lines if enabled
+            if (showDistanceLabels)
             {
-                if (otherObj == obj || otherObj == null) continue;
-
-                Vector3 startPosition = obj.position;
-                Vector3 endPosition = otherObj.position;
-                float distance = Vector3.Distance(startPosition, endPosition);
-
-                Handles.DrawAAPolyLine(lineWidth, startPosition, endPosition);
-
-                if (showDistanceLabels)
+                foreach (var otherObj in Selection.transforms)
                 {
+                    if (otherObj == obj || otherObj == null) continue;
+
+                    Vector3 startPosition = obj.position;
+                    Vector3 endPosition = otherObj.position;
+                    float distance = Vector3.Distance(startPosition, endPosition);
+
+                    // Draw the line between objects
+                    Handles.DrawAAPolyLine(lineWidth, startPosition, endPosition);
+
+                    // Display distance label at the midpoint
                     DrawOutlinedLabel((startPosition + endPosition) / 2, $"Distance: {distance:F2}", outlineWidth);
                 }
             }
