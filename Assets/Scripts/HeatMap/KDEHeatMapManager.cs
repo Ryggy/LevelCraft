@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEngine;
 using DataVisualization;
 
-public class HeatmapManager : MonoBehaviour
+public class KDEHeatmapManager : MonoBehaviour
 {
     public Gradient heatmapGradient;
     public Vector2 gridMin = new Vector2(-10, -10);
