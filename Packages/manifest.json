@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "com.maesla.datavisualizationforunity": "git+https://github.com/Maesla/DataVisualizationForUnity.git?path=/Packages/com.maesla.datavisualizationforunity",
     "com.unity.collab-proxy": "2.5.2",
     "com.unity.feature.development": "1.0.1",
     "com.unity.textmeshpro": "3.0.6",
