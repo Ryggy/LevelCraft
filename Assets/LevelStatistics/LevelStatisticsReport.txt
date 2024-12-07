@@ -1,8 +1,8 @@
 Level Statistics Report
-Scene: Demo
-Generated At: 2024-12-06 20:17:22
+Scene: BlankDemo
+Generated At: 2024-12-07 23:59:55
 =======================
 Playable Area Size: 400.00 units²
-Obstacles: 9
-Interactables: 1
-Collectibles: 0
+Obstacles: 10
+Interactable: 1
+Collectibles: 51

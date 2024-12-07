@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -10,6 +9,9 @@ public class HeatmapTrackingEditor : EditorWindow
     private List<HeatmapTracker> trackers = new List<HeatmapTracker>();
     private List<string> activeTrackers = new List<string>();
 
+    private bool realTimeHeatmap = false;
+    private bool previousRealTimeHeatmap = false; // Store the previous state of the toggle
+    
     [MenuItem("Tools/Heatmap Tracking Editor")]
     public static void ShowWindow()
     {
@@ -59,6 +61,7 @@ public class HeatmapTrackingEditor : EditorWindow
             return;
         }
 
+        // Start/Stop Tracking
         if (GUILayout.Button(heatmapManager.isTracking ? "Stop Tracking" : "Start Tracking"))
         {
             heatmapManager.ToggleTracking(!heatmapManager.isTracking);
@@ -92,6 +95,32 @@ public class HeatmapTrackingEditor : EditorWindow
             ApplyTrackers();
         }
 
+        GUILayout.Space(10);
+
+        // Real-time Heatmap toggle
+        realTimeHeatmap = GUILayout.Toggle(realTimeHeatmap, "Enable Real-Time Heatmap Generation");
+        
+        if (realTimeHeatmap)
+        {
+            EditorGUILayout.HelpBox("Enabling real-time heatmap generation may impact performance.", MessageType.Warning);
+        }
+
+        // Call ToggleRealTimeUpdates only if the toggle changes
+        if (realTimeHeatmap != previousRealTimeHeatmap)
+        {
+            if (heatmapManager != null)
+            {
+                heatmapManager.ToggleRealTimeUpdates(realTimeHeatmap);
+                Debug.Log($"Real-Time Heatmap Generation set to: {realTimeHeatmap}");
+            }
+            else
+            {
+                Debug.LogWarning("HeatmapManager not found. Unable to toggle real-time updates.");
+            }
+
+            previousRealTimeHeatmap = realTimeHeatmap; // Update the previous state
+        }
+
         GUILayout.Space(20);
 
         GUILayout.Label("Active Trackers", EditorStyles.boldLabel);
@@ -104,6 +133,37 @@ public class HeatmapTrackingEditor : EditorWindow
             foreach (string tracker in activeTrackers)
             {
                 GUILayout.Label($"- {tracker}", EditorStyles.label);
+            }
+        }
+        
+        GUILayout.Space(20);
+
+        // Load Previous Heatmap Button
+        if (GUILayout.Button("Load Previous Heatmap"))
+        {
+            if (heatmapManager != null)
+            {
+                heatmapManager.LoadPreviousHeatmap();
+            }
+            else
+            {
+                Debug.LogWarning("HeatmapManager not found. Unable to load previous heatmap.");
+            }
+        }
+
+        GUILayout.Space(10);
+
+        // Clear Heatmap Button
+        if (GUILayout.Button("Clear Heatmap"))
+        {
+            if (heatmapManager != null)
+            {
+                heatmapManager.ClearHeatmap();
+                Debug.Log("Heatmap has been cleared.");
+            }
+            else
+            {
+                Debug.LogWarning("HeatmapManager not found. Unable to clear heatmap.");
             }
         }
     }
